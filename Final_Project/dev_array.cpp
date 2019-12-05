@@ -55,10 +55,9 @@ void dev_array::set(const float* src)
 	}
 }
 
-void dev_array::get(float* dest, size_t size)
+void dev_array::get(float* dest)
 {
-	size_t min = std::min(size, getSize());
-	cudaError_t result = cudaMemcpy(dest, start_, min * sizeof(float), cudaMemcpyDeviceToHost);
+	cudaError_t result = cudaMemcpy(dest, start_, getSize() * sizeof(float), cudaMemcpyDeviceToHost);
 	if (result != cudaSuccess)
 	{
 		throw std::runtime_error("failed to copy to host memory");

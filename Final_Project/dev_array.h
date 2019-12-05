@@ -20,7 +20,7 @@ public:
 	int getColSize() const;
 
 	void set(const float* src);
-	void get(float* dest, size_t size);
+	void get(float* dest);
 
 private:
 	void allocate(size_t size);

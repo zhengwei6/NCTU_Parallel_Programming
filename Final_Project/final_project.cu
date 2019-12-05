@@ -38,7 +38,6 @@ float* random_generate(float *M, size_t size) {
 }
 
 int main(int argc, char *argv[]) {
-
 	// generate W1,W2,W3
 	float *W1=NULL,*W2=NULL,*W3=NULL;
 	W1 = random_generate(W1, 64 * 32);
@@ -51,7 +50,7 @@ int main(int argc, char *argv[]) {
 	W2_d.set(W2);
 	W3_d.set(W3);
 	matrixMultiplication(W1_d.getData(),W2_d.getData(), W3_d.getData(), W1_d.getRowSize() , W2_d.getColSize(), W1_d.getColSize());
-	W3_d.get(W3, 64 * 64);
+	W3_d.get(W3);
 	for (int i = 0;i < 64;i++) {
 		for (int j = 0;j < 64;j++)
 			printf("%f ", W3[i * 64 + j]);
