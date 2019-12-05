@@ -9,7 +9,7 @@ class dev_array
 {
 public:
 	explicit dev_array();
-	explicit dev_array(int row_size,int col_size);
+	explicit dev_array(int row_size, int col_size);
 	~dev_array();
 
 	void resize(int row_size, int col_size);

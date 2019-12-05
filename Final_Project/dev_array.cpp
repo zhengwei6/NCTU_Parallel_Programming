@@ -1,6 +1,6 @@
 #include "dev_array.h"
 
-dev_array::dev_array() : start_(0),end_(0), row_size_(0), col_size_(0)
+dev_array::dev_array() : start_(0), end_(0), row_size_(0), col_size_(0)
 {}
 
 dev_array::dev_array(int row_size, int col_size)
