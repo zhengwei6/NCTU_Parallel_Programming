@@ -46,10 +46,9 @@ int dev_array::getColSize() const
 	return col_size_;
 }
 
-void dev_array::set(const float* src, size_t size)
+void dev_array::set(const float* src)
 {
-	size_t min = std::min(size, getSize());
-	cudaError_t result = cudaMemcpy(start_, src, min * sizeof(float), cudaMemcpyHostToDevice);
+	cudaError_t result = cudaMemcpy(start_, src, getSize() * sizeof(float), cudaMemcpyHostToDevice);
 	if (result != cudaSuccess)
 	{
 		throw std::runtime_error("failed to copy to device memory");

@@ -47,9 +47,9 @@ int main(int argc, char *argv[]) {
 	dev_array W1_d(64, 32);
 	dev_array W2_d(32, 64);
 	dev_array W3_d(64, 64);
-	W1_d.set(W1, 64 * 32);
-	W2_d.set(W2, 32 * 64);
-	W3_d.set(W3, 64* 64);
+	W1_d.set(W1);
+	W2_d.set(W2);
+	W3_d.set(W3);
 	matrixMultiplication(W1_d.getData(),W2_d.getData(), W3_d.getData(), W1_d.getRowSize() , W2_d.getColSize(), W1_d.getColSize());
 	W3_d.get(W3, 64 * 64);
 	for (int i = 0;i < 64;i++) {

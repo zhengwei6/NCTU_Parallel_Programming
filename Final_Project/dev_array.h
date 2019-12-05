@@ -19,7 +19,7 @@ public:
 	int getRowSize() const;
 	int getColSize() const;
 
-	void set(const float* src, size_t size);
+	void set(const float* src);
 	void get(float* dest, size_t size);
 
 private:
