@@ -401,35 +401,3 @@ int main(int argc, char *argv[]) {
 	}
 	print_value(W3, 64, 10);
 }
-
-/*
-float *W1=NULL,*W2=NULL,*W3=NULL;
-W1 = test_generate(W1, 256 * 784,2);
-W2 = test_generate(W2, 784 * 128,1);
-W3 = (float *)malloc(256*128 * sizeof(float));
-dev_array W1_d(256, 784);
-dev_array W2_d(784, 128);
-dev_array W3_d(256, 128);
-W1_d.set(W1);
-W2_d.set(W2);
-W3_d.set(W3);
-
-matrixMultiplication(W1_d.getData(),W2_d.getData(), W3_d.getData(), W1_d.getRowSize() , W2_d.getColSize(), W1_d.getColSize());
-W3_d.get(W3);
-for (int i = 0;i < 256;i++) {
-	for (int j = 0;j < 128;j++)
-		printf("%f ", W3[i * 128 + j]);
-}
-*/
-/*
-float *W1 = NULL,*W2=NULL,*W3=NULL;
-W1 = test_generate(W1, 32 * 16, 2);
-W1[1 * 16 + 2] = 1;
-
-W3 = (float *)malloc(16*32 * sizeof(float));
-dev_array W1_d(32, 16);
-W1_d.set(W1);
-W2 = matrixTranspose_secondv(W1_d.getData(), 32, 16);
-cudaMemcpy(W3, W2, 32 * 16 * sizeof(float), cudaMemcpyDeviceToHost);
-print_value(W3, 16, 32);
-*/
