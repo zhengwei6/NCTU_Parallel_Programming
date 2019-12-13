@@ -7,9 +7,40 @@
 #include <math.h>
 #include <random>
 #include <algorithm>
-
+#include<string>
+#include <fstream>
+#include <sstream>
 using namespace std;
 
+
+vector<string> split(const string &s, char delim) {
+	stringstream ss(s);
+	string item;
+	vector<string> tokens;
+	while (getline(ss, item, delim)) {
+		tokens.push_back(item);
+	}
+	return tokens;
+}
+
+vector <float> operator/(const vector <float>& m2, const float m1) {
+
+	/*  Returns the product of a float and a vectors (elementwise multiplication).
+	 Inputs:
+	 m1: float
+	 m2: vector
+	 Output: vector, m1 * m2, product of two vectors m1 and m2
+	 */
+
+	const unsigned long VECTOR_SIZE = m2.size();
+	vector <float> product(VECTOR_SIZE);
+
+	for (unsigned i = 0; i != VECTOR_SIZE; ++i) {
+		product[i] = m2[i] / m1;
+	};
+
+	return product;
+}
 __global__ void matrixMultiplicationKernel(float* A, float* B, float* C, int K_Width, int  Col_Size) {
 
 	int Row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -108,17 +139,27 @@ __global__ void sofmaxKernel(float *Input, float *Output) {
 }
 /////////////////////////////////////////////////////////////////////////////////
 void matrixMultiplication(float *A, float *B, float *C, int Row_Size, int Col_Size, int K_Width) {
-	dim3 threadsPerBlock(16, 16);
-	dim3 blocksPerGrid(Col_Size / 16,Row_Size / 16);
-	matrixMultiplicationKernel << <blocksPerGrid, threadsPerBlock >> > (A, B, C, K_Width, Col_Size);
+	if (Col_Size == 10) {
+		dim3 threadsPerBlock(10, 16);
+		dim3 blocksPerGrid(Col_Size / 10, Row_Size / 16);
+		matrixMultiplicationKernel << <blocksPerGrid, threadsPerBlock >> > (A, B, C, K_Width, Col_Size);
+	}
+	else {
+		dim3 threadsPerBlock(16, 16);
+		dim3 blocksPerGrid(Col_Size / 16, Row_Size / 16);
+		matrixMultiplicationKernel << <blocksPerGrid, threadsPerBlock >> > (A, B, C, K_Width, Col_Size);
+	}
 }
 
 void relu(float *Input, float *Output, int size) {
 	reluKernel <<< size/16, 16>> > (Input,Output);
 }
 
-void reluPrime(float *Input, float *Output, int size) {
+float* reluPrime(float *Input, int size) {
+	float *Output = NULL;
+	cudaMalloc(&Output, size * sizeof(float));
 	reluPrimeKernel<<< size/16, 16>>>(Input,Output);
+	return Output;
 }
 
 void sigmoid(float *Input, float *Output, int size) {
@@ -136,9 +177,16 @@ void matrixAdd(float *A, float *B, float *C, int Row_Size, int Col_Size) {
 }
 
 void matrixMinus(float *A, float *B, float *C, int Row_Size, int Col_Size) {
-	dim3 threadsPerBlock(16, 16);
-	dim3 blocksPerGrid(Col_Size/16, Row_Size/16);
-	matrixMinusKernel << < blocksPerGrid, threadsPerBlock >> > (A,B,C,Col_Size);
+	if (Col_Size == 10) {
+		dim3 threadsPerBlock(10, 16);
+		dim3 blocksPerGrid(Col_Size / 10, Row_Size / 16);
+		matrixMinusKernel << < blocksPerGrid, threadsPerBlock >> > (A, B, C, Col_Size);
+	}
+	else {
+		dim3 threadsPerBlock(16, 16);
+		dim3 blocksPerGrid(Col_Size / 16, Row_Size / 16);
+		matrixMinusKernel << < blocksPerGrid, threadsPerBlock >> > (A, B, C, Col_Size);
+	}
 }
 
 void matrixProduct(float *A, float *B, float *C, int Row_Size, int Col_Size) {
@@ -147,8 +195,11 @@ void matrixProduct(float *A, float *B, float *C, int Row_Size, int Col_Size) {
 	matrixProductKernel << < blocksPerGrid, threadsPerBlock>> > (A,B,C,Col_Size);
 }
 
-void matrixValueProduct(float *Input, float *Output, int size, float value) {
+float* matrixValueProduct(float *Input, int size, float value) {
+	float *Output = NULL;
+	cudaMalloc(&Output, size*sizeof(float));
 	matrixValueProductKernel<< < size / 16, 16 >> > (Input, Output, value);
+	return Output;
 }
 
 void matrixValueDivide(float *Input, float *Output, int size, float value) {
@@ -160,6 +211,25 @@ void matrixTranspose(float *Input, float *Output, int Row_Size, int Col_Size) {
 	dim3 blocksPerGrid(Col_Size / 16, Row_Size / 16);
 	matrixTransposeKernel << < blocksPerGrid, threadsPerBlock >> > (Input,Output,Row_Size,Col_Size);
 }
+
+float* matrixTranspose_secondv(float *Input, int Row_Size, int Col_Size) {
+	if (Col_Size == 10) {
+		dim3 threadsPerBlock(10, 16);
+		dim3 blocksPerGrid(Col_Size / 10, Row_Size / 16);
+		float *Output = NULL;
+		cudaMalloc(&Output, Row_Size * Col_Size * sizeof(float));
+		matrixTransposeKernel << < blocksPerGrid, threadsPerBlock >> > (Input, Output, Row_Size, Col_Size);
+		return Output;
+	}
+	else {
+		dim3 threadsPerBlock(16, 16);
+		dim3 blocksPerGrid(Col_Size / 16, Row_Size / 16);
+		float *Output = NULL;
+		cudaMalloc(&Output, Row_Size * Col_Size * sizeof(float));
+		matrixTransposeKernel << < blocksPerGrid, threadsPerBlock >> > (Input, Output, Row_Size, Col_Size);
+		return Output;
+	}
+}   
 
 void softmax(float *Input, float *Output,int size) {
 	sofmaxKernel << <1,size / 10 >> > (Input, Output);
@@ -184,161 +254,182 @@ float* random_generate(float *M, size_t size) {
 	return M;
 }
 
-
-int main(int argc, char *argv[]) {
-	// generate W1,W2,W3
-	/*
-	//matrixMultiplication
-	float *W1=NULL,*W2=NULL,*W3=NULL;
-	W1 = test_generate(W1, 64 * 32,1);
-	W2 = test_generate(W2, 32 * 64,1);
-	W3 = (float *)malloc(64*64 * sizeof(float));
-	dev_array W1_d(64, 32);
-	dev_array W2_d(32, 64);
-	dev_array W3_d(64, 64);
-	W1_d.set(W1);
-	W2_d.set(W2);
-	W3_d.set(W3);
-	matrixMultiplication(W1_d.getData(),W2_d.getData(), W3_d.getData(), W1_d.getRowSize() , W2_d.getColSize(), W1_d.getColSize());
-	W3_d.get(W3);
-	for (int i = 0;i < 64;i++) {
-		for (int j = 0;j < 64;j++)
-			printf("%f ", W3[i * 64 + j]);
-	}
-	*/
-	/*
-	float *W1 = NULL,*W3=NULL;
-	W1 = random_generate(W1, 128*1);
-	W3 = (float *)malloc(128 * 1 * sizeof(float));
-	dev_array W1_d(128, 1);
-	dev_array W3_d(128, 1);
-	W1_d.set(W1);
-	W3_d.set(W3);
-	relu(W1_d.getData(), W3_d.getData(), W3_d.getSize());
-	W3_d.get(W3);
-	for (int i = 0;i < 128;i++) {
-			printf("%f ", W3[i]);
-	}
-	*/
-	/*
-	float *W1 = NULL,*W3=NULL;
-	W1 = test_generate(W1, 128*1,1);
-	W3 = (float *)malloc(128 * 1 * sizeof(float));
-	dev_array W1_d(128, 1);
-	dev_array W3_d(128, 1);
-	W1_d.set(W1);
-	W3_d.set(W3);
-	sigmoid(W1_d.getData(), W3_d.getData(), W3_d.getSize());
-	W3_d.get(W3);
-	for (int i = 0;i < 128;i++) {
-			printf("%f ", W3[i]);
-	}
-	*/
-	/*
-	float *W1 = NULL,*W2 = NULL,*W3=NULL;
-	W1 = test_generate(W1, 128*16,1);
-	W2 = test_generate(W2, 1280*16,1);
-	W3 = (float *)malloc(128 * 16 * sizeof(float));
-	dev_array W1_d(128, 16);
-	dev_array W2_d(128, 16);
-	dev_array W3_d(128, 16);
-	W1_d.set(W1);
-	W2_d.set(W1);
-	W3_d.set(W3);
-	matrixAdd(W1_d.getData(), W2_d.getData(), W3_d.getData(), 128, 16);
-	W3_d.get(W3);
-	for (int i = 0;i < 128*16;i++) {
-			printf("%f ", W3[i]);
-	}
-	*/
-	/*
-	float *W1 = NULL,*W2 = NULL,*W3=NULL;
-	W1 = test_generate(W1, 128*16,1);
-	W2 = test_generate(W2, 1280*16,1);
-	W3 = (float *)malloc(128 * 16 * sizeof(float));
-	dev_array W1_d(128, 16);
-	dev_array W2_d(128, 16);
-	dev_array W3_d(128, 16);
-	W1_d.set(W1);
-	W2_d.set(W1);
-	W3_d.set(W3);
-	matrixMinus(W1_d.getData(), W2_d.getData(), W3_d.getData(), 128, 16);
-	W3_d.get(W3);
-	for (int i = 0;i < 128*16;i++) {
-			printf("%f ", W3[i]);
-	}
-	*/
-	/*
-	float *W1 = NULL,*W2 = NULL,*W3=NULL;
-	W1 = test_generate(W1, 128*16,1);
-	W2 = test_generate(W2, 128*16,2);
-	W3 = (float *)malloc(128 * 16 * sizeof(float));
-	dev_array W1_d(128, 16);
-	dev_array W2_d(128, 16);
-	dev_array W3_d(128, 16);
-	W1_d.set(W1);
-	W2_d.set(W2);
-	W3_d.set(W3);
-	matrixProduct(W1_d.getData(), W2_d.getData(), W3_d.getData(), 128, 16);
-	W3_d.get(W3);
-	for (int i = 0;i < 128*16;i++) {
-			printf("%f ", W3[i]);
-	}
-	*/
-	/*
-	float *W1 = NULL,*W3=NULL;
-	W1 = test_generate(W1, 128*1,1);
-	W3 = (float *)malloc(128 * 1 * sizeof(float));
-	dev_array W1_d(128, 1);
-	dev_array W3_d(128, 1);
-	W1_d.set(W1);
-	W3_d.set(W3);
-	matrixValueProduct(W1_d.getData(), W1_d.getData(), W1_d.getSize(), 5);
-	W1_d.get(W1);
-	for (int i = 0;i < 128;i++) {
-			printf("%f ", W1[i]);
-	}
-	*/
-    /*
-	float *W1 = NULL,*W3=NULL;
-	W1 = test_generate(W1, 128*1,1.0);
-	W3 = (float *)malloc(128 * 1 * sizeof(float));
-	dev_array W1_d(128, 1);
-	dev_array W3_d(128, 1);
-	W1_d.set(W1);
-	W3_d.set(W3);
-	matrixValueDivide(W1_d.getData(), W3_d.getData(), W1_d.getSize(), 5);
-	W3_d.get(W3);
-	for (int i = 0;i < 128;i++) {
-			printf("%f ", W3[i]);
-	}
-	*/
-     /*
-	float *W1 = NULL,*W3=NULL;
-	W1 = test_generate(W1, 128*16,2.0);
-	W3 = (float *)malloc(16*128 * sizeof(float));
-	dev_array W1_d(128, 16);
-	dev_array W3_d(16, 128);
-	W1_d.set(W1);
-	W3_d.set(W3);
-	matrixTranspose(W1_d.getData(), W3_d.getData(), 128, 16);
-	W3_d.get(W3);
-	for (int i = 0;i < 16;i++) {
-		for(int j=0;j < 128;j++)
-			printf("%f ", W3[i*128+j]);
-	}
-	*/
-	float *W1 = NULL,*W3=NULL;
-	W1 = test_generate(W1, 256*10,2.0);
-	W3 = (float *)malloc(256*10 * sizeof(float));
-	dev_array W1_d(256, 10);
-	dev_array W3_d(256, 10);
-	W1_d.set(W1);
-	W3_d.set(W3);
-	softmax(W1_d.getData(), W3_d.getData(), W1_d.getSize());
-	W3_d.get(W3);
-	for (int i = 0;i < 256;i++) {
-		for(int j=0;j < 10;j++)
-			printf("%f ", W3[i*10+j]);
+void print_value(float *M, int Row_Size, int Col_Size) {
+	for (int i = 0; i < Row_Size; i++) {
+		for (int j = 0; j < Col_Size; j++) {
+			printf("%f ",M[i*Col_Size + j]);
+		}
+		printf("\n\n");
 	}
 }
+int main(int argc, char *argv[]) {
+	// generate W1,W2,W3
+	//matrixMultiplication
+	string line;
+	vector<string> line_v;
+	cout << "Loading data ...\n";
+	vector<float> X_train;
+	vector<float> y_train;
+	ifstream myfile("./train.txt");
+	if (myfile.is_open()) {
+		while (getline(myfile, line)) {
+			line_v = split(line, '\t');
+			int digit = strtof((line_v[0]).c_str(), 0);
+			for (unsigned i = 0; i < 10; ++i) {
+				if (i == digit)
+				{
+					y_train.push_back(1.);
+				}
+				else y_train.push_back(0.);
+			}
+			int size = static_cast<int>(line_v.size());
+			for (unsigned i = 1; i < size; ++i) {
+				X_train.push_back(strtof((line_v[i]).c_str(), 0));
+			}
+		}
+		X_train = X_train / 255.0;
+	}
+	else cout << "Unable to open file" << '\n';
+	cout << X_train.size();
+	myfile.close();
+
+
+	int BATCH_SIZE = 256;
+	float lr = .01 / BATCH_SIZE;
+
+	// Random initialization of the weights
+	float *W1 = NULL, *W2 = NULL, *W3 = NULL, *b_x = NULL, *b_y = NULL;
+	float *a1 = NULL, *a2 = NULL, *yhat = NULL, *dyhat = NULL;
+	float *dw3 = NULL, *dz2 = NULL , *dw2 = NULL, *dz1 = NULL, *dw1=NULL;
+
+	// forward variable
+	W1  = random_generate(W1, 784*128);
+	W2  = random_generate(W2, 128*64);
+	W3  = random_generate(W3, 64*10);
+	b_x = (float *)malloc(BATCH_SIZE * 784 * sizeof(float));
+	b_y = (float *)malloc(BATCH_SIZE * 10  * sizeof(float));
+	a1 =  (float *)malloc(BATCH_SIZE * 128 * sizeof(float));
+	a2 =  (float *)malloc(BATCH_SIZE * 64 * sizeof(float));
+	yhat = (float *)malloc(BATCH_SIZE * 10 * sizeof(float));
+	// 
+	dyhat = (float *)malloc(BATCH_SIZE * 10 * sizeof(float));
+	dw3   = (float *)malloc(64 * 10 * sizeof(float));
+	dz2   = (float *)malloc(256 * 64 * sizeof(float));
+	dw2   = (float *)malloc(128 * 64 * sizeof(float));
+	dz1   = (float *)malloc(256 * 128 * sizeof(float));
+	dw1   = (float *)malloc(784 * 128 * sizeof(float));
+
+	dev_array W1_d(784, 128);
+	dev_array W2_d(128, 64);
+	dev_array W3_d(64, 10);
+	dev_array b_x_d(BATCH_SIZE , 784);
+	dev_array b_y_d(BATCH_SIZE , 10);
+	dev_array a1_d(BATCH_SIZE, 128);
+	dev_array a2_d(BATCH_SIZE, 64);
+	dev_array yhat_d(BATCH_SIZE, 10);
+	dev_array dyhat_d(BATCH_SIZE, 10);
+	dev_array dw3_d(64, 10);
+	dev_array dz2_d(256, 64);
+	dev_array dw2_d(128 ,64);
+	dev_array dz1_d(256, 128);
+	dev_array dw1_d(784, 128);
+
+	W1_d.set(W1);
+	W2_d.set(W2);
+	W3_d.set(W3);
+	b_x_d.set(b_x);
+	b_y_d.set(b_y);
+	a1_d.set(a1);
+	a2_d.set(a2);
+	yhat_d.set(yhat);
+	dyhat_d.set(dyhat);
+	dw3_d.set(dw3);
+	dz2_d.set(dz2);
+	dw2_d.set(dw2);
+	dz1_d.set(dz1);
+	dw1_d.set(dw1);
+
+	cout << "Training the model ...\n";
+
+	for (unsigned i = 0 ; i < 10000; i++) {
+		//int randindx = rand() % (42000 - BATCH_SIZE);
+		int randindx = 100;
+		copy(X_train.begin()+ randindx * 784, X_train.begin() + (randindx+ BATCH_SIZE)*784, b_x);
+		cudaMemcpy(b_x_d.getData(), b_x,  BATCH_SIZE * 784 * sizeof(float) ,cudaMemcpyHostToDevice);
+		
+		copy(y_train.begin() + randindx * 10, y_train.begin() + (randindx + BATCH_SIZE) * 10, b_y);
+		cudaMemcpy(b_y_d.getData(), b_y, BATCH_SIZE * 10 * sizeof(float), cudaMemcpyHostToDevice);
+	    
+
+		matrixMultiplication(b_x_d.getData(), W1_d.getData(), a1_d.getData(), b_x_d.getRowSize(), W1_d.getColSize(), b_x_d.getColSize());
+		relu(a1_d.getData(), a1_d.getData(), 256 * 128);
+
+		matrixMultiplication(a1_d.getData(), W2_d.getData(), a2_d.getData(), 256, 64, 128);
+		relu(a2_d.getData(), a2_d.getData(), 256 * 64);
+
+		matrixMultiplication(a2_d.getData(), W3_d.getData(), yhat_d.getData(), 256, 10, 64);
+		softmax(yhat_d.getData(), yhat_d.getData(), 256*10);
+		//yhat_d.get(yhat);
+
+		// Back propagation
+		matrixMinus(yhat_d.getData(), b_y_d.getData(), dyhat_d.getData(), 256, 10);
+
+		matrixMultiplication(matrixTranspose_secondv(a2_d.getData(), BATCH_SIZE, 64), dyhat_d.getData(), dw3_d.getData(), 64, 10, 256);
+
+		matrixMultiplication(dyhat_d.getData(), matrixTranspose_secondv(W3_d.getData(),64,10), dz2_d.getData(),256,64,10);
+
+		matrixProduct(dz2_d.getData(), reluPrime(a2_d.getData(),a2_d.getSize()) , dz2_d.getData(), 256, 64);
+
+		matrixMultiplication(dz2_d.getData(), matrixTranspose_secondv(W2_d.getData(),128,64), dz1_d.getData(), 256,128,64);
+		matrixProduct(dz1_d.getData(), reluPrime(a1_d.getData(), a1_d.getSize()), dz1_d.getData(), 256,128);
+
+		matrixMultiplication(matrixTranspose_secondv(b_x_d.getData(),256,784),dz1_d.getData(), dw1_d.getData(),784,128,256);
+
+
+		matrixMinus(W3_d.getData(), matrixValueProduct(dw3_d.getData(), dw3_d.getSize(), lr), W3_d.getData(), 64, 10);
+		matrixMinus(W2_d.getData(), matrixValueProduct(dw2_d.getData(), dw2_d.getSize(), lr), W2_d.getData(), 128, 64);
+		matrixMinus(W1_d.getData(), matrixValueProduct(dw1_d.getData(), dw1_d.getSize(), lr), W1_d.getData(), 784, 128);
+		if ((i + 1) % 100 == 0) {
+			cout << "-----------------------------------------------Epoch " << i + 1 << "--------------------------------------------------" << "\n";
+			cout << "Predictions:" << "\n";
+			yhat_d.get(yhat);
+			print_value(yhat, 10, 10);
+			cout << "Ground truth:" << "\n";
+			b_y_d.get(b_y);
+			print_value(b_y, 10, 10);
+		}
+	}
+	print_value(W3, 64, 10);
+}
+
+/*
+float *W1=NULL,*W2=NULL,*W3=NULL;
+W1 = test_generate(W1, 256 * 784,2);
+W2 = test_generate(W2, 784 * 128,1);
+W3 = (float *)malloc(256*128 * sizeof(float));
+dev_array W1_d(256, 784);
+dev_array W2_d(784, 128);
+dev_array W3_d(256, 128);
+W1_d.set(W1);
+W2_d.set(W2);
+W3_d.set(W3);
+
+matrixMultiplication(W1_d.getData(),W2_d.getData(), W3_d.getData(), W1_d.getRowSize() , W2_d.getColSize(), W1_d.getColSize());
+W3_d.get(W3);
+for (int i = 0;i < 256;i++) {
+	for (int j = 0;j < 128;j++)
+		printf("%f ", W3[i * 128 + j]);
+}
+*/
+/*
+float *W1 = NULL,*W2=NULL,*W3=NULL;
+W1 = test_generate(W1, 32 * 16, 2);
+W1[1 * 16 + 2] = 1;
+
+W3 = (float *)malloc(16*32 * sizeof(float));
+dev_array W1_d(32, 16);
+W1_d.set(W1);
+W2 = matrixTranspose_secondv(W1_d.getData(), 32, 16);
+cudaMemcpy(W3, W2, 32 * 16 * sizeof(float), cudaMemcpyDeviceToHost);
+print_value(W3, 16, 32);
+*/
