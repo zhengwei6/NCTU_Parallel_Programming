@@ -262,6 +262,17 @@ void print_value(float *M, int Row_Size, int Col_Size) {
 		printf("\n\n");
 	}
 }
+
+float compute_accuracy(float *prediction,float *ground_truth, int Row_Size, int Col_Size) {
+	float correct = 0;
+	for (int i = 0;i < Row_Size;i++) {
+		int index1 = distance(&prediction[i*Col_Size], max_element(&prediction[i*Col_Size], &prediction[i*Col_Size] + Col_Size));
+		int index2 = distance(&ground_truth[i*Col_Size], max_element(&ground_truth[i*Col_Size], &ground_truth[i*Col_Size] + Col_Size));
+		if (index1 == index2)
+			correct += 1;
+	}
+	return correct / Row_Size;
+}
 int main(int argc, char *argv[]) {
 	// generate W1,W2,W3
 	//matrixMultiplication
@@ -301,6 +312,7 @@ int main(int argc, char *argv[]) {
 	float *W1 = NULL, *W2 = NULL, *W3 = NULL, *b_x = NULL, *b_y = NULL;
 	float *a1 = NULL, *a2 = NULL, *yhat = NULL, *dyhat = NULL;
 	float *dw3 = NULL, *dz2 = NULL , *dw2 = NULL, *dz1 = NULL, *dw1=NULL;
+	float *temp;
 
 	// forward variable
 	W1  = random_generate(W1, 784*128);
@@ -351,16 +363,14 @@ int main(int argc, char *argv[]) {
 
 	cout << "Training the model ...\n";
 
-	for (unsigned i = 0 ; i < 10000; i++) {
-		//int randindx = rand() % (42000 - BATCH_SIZE);
-		int randindx = 100;
+	for (unsigned i = 0 ; i < 32000; i++) {
+		int randindx = rand() % (37904 - BATCH_SIZE);
 		copy(X_train.begin()+ randindx * 784, X_train.begin() + (randindx+ BATCH_SIZE)*784, b_x);
 		cudaMemcpy(b_x_d.getData(), b_x,  BATCH_SIZE * 784 * sizeof(float) ,cudaMemcpyHostToDevice);
 		
 		copy(y_train.begin() + randindx * 10, y_train.begin() + (randindx + BATCH_SIZE) * 10, b_y);
 		cudaMemcpy(b_y_d.getData(), b_y, BATCH_SIZE * 10 * sizeof(float), cudaMemcpyHostToDevice);
 	    
-
 		matrixMultiplication(b_x_d.getData(), W1_d.getData(), a1_d.getData(), b_x_d.getRowSize(), W1_d.getColSize(), b_x_d.getColSize());
 		relu(a1_d.getData(), a1_d.getData(), 256 * 128);
 
@@ -374,30 +384,115 @@ int main(int argc, char *argv[]) {
 		// Back propagation
 		matrixMinus(yhat_d.getData(), b_y_d.getData(), dyhat_d.getData(), 256, 10);
 
-		matrixMultiplication(matrixTranspose_secondv(a2_d.getData(), BATCH_SIZE, 64), dyhat_d.getData(), dw3_d.getData(), 64, 10, 256);
+		temp = matrixTranspose_secondv(a2_d.getData(), BATCH_SIZE, 64);
+		matrixMultiplication(temp, dyhat_d.getData(), dw3_d.getData(), 64, 10, 256);
+		cudaFree(temp);
 
-		matrixMultiplication(dyhat_d.getData(), matrixTranspose_secondv(W3_d.getData(),64,10), dz2_d.getData(),256,64,10);
+		temp = matrixTranspose_secondv(W3_d.getData(), 64, 10);
+		matrixMultiplication(dyhat_d.getData(), temp, dz2_d.getData(),256,64,10);
+		cudaFree(temp);
 
+		temp = reluPrime(a2_d.getData(), a2_d.getSize());
 		matrixProduct(dz2_d.getData(), reluPrime(a2_d.getData(),a2_d.getSize()) , dz2_d.getData(), 256, 64);
+		cudaFree(temp);
 
-		matrixMultiplication(dz2_d.getData(), matrixTranspose_secondv(W2_d.getData(),128,64), dz1_d.getData(), 256,128,64);
+		temp = matrixTranspose_secondv(W2_d.getData(), 128, 64);
+		matrixMultiplication(dz2_d.getData(), temp, dz1_d.getData(), 256,128,64);
+		cudaFree(temp);
+
+		temp = reluPrime(a1_d.getData(), a1_d.getSize());
 		matrixProduct(dz1_d.getData(), reluPrime(a1_d.getData(), a1_d.getSize()), dz1_d.getData(), 256,128);
+		cudaFree(temp);
 
-		matrixMultiplication(matrixTranspose_secondv(b_x_d.getData(),256,784),dz1_d.getData(), dw1_d.getData(),784,128,256);
+		temp = matrixTranspose_secondv(b_x_d.getData(), 256, 784);
+		matrixMultiplication(temp,dz1_d.getData(), dw1_d.getData(),784,128,256);
+		cudaFree(temp);
 
+		temp = matrixValueProduct(dw3_d.getData(), dw3_d.getSize(), lr);
+		matrixMinus(W3_d.getData(), temp, W3_d.getData(), 64, 10);
+		cudaFree(temp);
 
-		matrixMinus(W3_d.getData(), matrixValueProduct(dw3_d.getData(), dw3_d.getSize(), lr), W3_d.getData(), 64, 10);
-		matrixMinus(W2_d.getData(), matrixValueProduct(dw2_d.getData(), dw2_d.getSize(), lr), W2_d.getData(), 128, 64);
-		matrixMinus(W1_d.getData(), matrixValueProduct(dw1_d.getData(), dw1_d.getSize(), lr), W1_d.getData(), 784, 128);
+		temp = matrixValueProduct(dw2_d.getData(), dw2_d.getSize(), lr);
+		matrixMinus(W2_d.getData(), temp, W2_d.getData(), 128, 64);
+		cudaFree(temp);
+
+		temp = matrixValueProduct(dw1_d.getData(), dw1_d.getSize(), lr);
+		matrixMinus(W1_d.getData(), temp, W1_d.getData(), 784, 128);
+		cudaFree(temp);
 		if ((i + 1) % 100 == 0) {
 			cout << "-----------------------------------------------Epoch " << i + 1 << "--------------------------------------------------" << "\n";
-			cout << "Predictions:" << "\n";
+			//cout << "Predictions:" << "\n";
 			yhat_d.get(yhat);
-			print_value(yhat, 10, 10);
-			cout << "Ground truth:" << "\n";
+			//print_value(yhat, 10, 10);
+			//cout << "Ground truth:" << "\n";
 			b_y_d.get(b_y);
-			print_value(b_y, 10, 10);
+			//print_value(b_y, 10, 10);
+			cout << compute_accuracy(yhat, b_y, 256, 10) << endl;;
 		}
 	}
-	print_value(W3, 64, 10);
+	cout << endl;
+	cout << "Testing the model ...\n";
+	// testing
+	for (int i = 0; i < 16; i++) {
+		int randindx = 37096 + i * 256;
+		copy(X_train.begin() + randindx * 784, X_train.begin() + (randindx + BATCH_SIZE) * 784, b_x);
+		cudaMemcpy(b_x_d.getData(), b_x, BATCH_SIZE * 784 * sizeof(float), cudaMemcpyHostToDevice);
+
+		copy(y_train.begin() + randindx * 10, y_train.begin() + (randindx + BATCH_SIZE) * 10, b_y);
+		cudaMemcpy(b_y_d.getData(), b_y, BATCH_SIZE * 10 * sizeof(float), cudaMemcpyHostToDevice);
+
+		matrixMultiplication(b_x_d.getData(), W1_d.getData(), a1_d.getData(), b_x_d.getRowSize(), W1_d.getColSize(), b_x_d.getColSize());
+		relu(a1_d.getData(), a1_d.getData(), 256 * 128);
+
+		matrixMultiplication(a1_d.getData(), W2_d.getData(), a2_d.getData(), 256, 64, 128);
+		relu(a2_d.getData(), a2_d.getData(), 256 * 64);
+
+		matrixMultiplication(a2_d.getData(), W3_d.getData(), yhat_d.getData(), 256, 10, 64);
+		softmax(yhat_d.getData(), yhat_d.getData(), 256 * 10);
+		//yhat_d.get(yhat);
+
+		// Back propagation
+		matrixMinus(yhat_d.getData(), b_y_d.getData(), dyhat_d.getData(), 256, 10);
+
+		temp = matrixTranspose_secondv(a2_d.getData(), BATCH_SIZE, 64);
+		matrixMultiplication(temp, dyhat_d.getData(), dw3_d.getData(), 64, 10, 256);
+		cudaFree(temp);
+
+		temp = matrixTranspose_secondv(W3_d.getData(), 64, 10);
+		matrixMultiplication(dyhat_d.getData(), temp, dz2_d.getData(), 256, 64, 10);
+		cudaFree(temp);
+
+		temp = reluPrime(a2_d.getData(), a2_d.getSize());
+		matrixProduct(dz2_d.getData(), reluPrime(a2_d.getData(), a2_d.getSize()), dz2_d.getData(), 256, 64);
+		cudaFree(temp);
+
+		temp = matrixTranspose_secondv(W2_d.getData(), 128, 64);
+		matrixMultiplication(dz2_d.getData(), temp, dz1_d.getData(), 256, 128, 64);
+		cudaFree(temp);
+
+		temp = reluPrime(a1_d.getData(), a1_d.getSize());
+		matrixProduct(dz1_d.getData(), reluPrime(a1_d.getData(), a1_d.getSize()), dz1_d.getData(), 256, 128);
+		cudaFree(temp);
+
+		temp = matrixTranspose_secondv(b_x_d.getData(), 256, 784);
+		matrixMultiplication(temp, dz1_d.getData(), dw1_d.getData(), 784, 128, 256);
+		cudaFree(temp);
+
+		temp = matrixValueProduct(dw3_d.getData(), dw3_d.getSize(), lr);
+		matrixMinus(W3_d.getData(), temp, W3_d.getData(), 64, 10);
+		cudaFree(temp);
+
+		temp = matrixValueProduct(dw2_d.getData(), dw2_d.getSize(), lr);
+		matrixMinus(W2_d.getData(), temp, W2_d.getData(), 128, 64);
+		cudaFree(temp);
+
+		temp = matrixValueProduct(dw1_d.getData(), dw1_d.getSize(), lr);
+		matrixMinus(W1_d.getData(), temp, W1_d.getData(), 784, 128);
+		cudaFree(temp);
+		cout << "--------------------------------------------testing batch " << i + 1 << "--------------------------------------------------" << "\n";
+		yhat_d.get(yhat);
+		b_y_d.get(b_y);
+		cout << compute_accuracy(yhat, b_y, 256, 10) << endl;;
+	}
+
 }
